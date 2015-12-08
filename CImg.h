@@ -319,6 +319,36 @@ extern "C" {
 }
 #endif
 
+// Configure GifLib support.
+// (http://giflib.sourceforge.net/)
+//
+// Define 'cimg_use_gif' to enable GifLib support.
+//
+// GIF library may be used to get a native support of '.png' files.
+// (see methods 'CImg[List]<T>::{load,save}_gif()'.
+#ifdef cimg_use_gif
+extern "C" {
+#include "gif_lib.h"
+}
+
+#ifndef CIMG_GIF_GRAPHICS_EXT_FUNC_CODE
+#  ifdef GRAPHICS_EXT_FUNC_CODE
+#    define CIMG_GIF_GRAPHICS_EXT_FUNC_CODE GRAPHICS_EXT_FUNC_CODE
+#  else
+#    define CIMG_GIF_GRAPHICS_EXT_FUNC_CODE 0xf9
+#  endif
+#endif
+
+#ifndef CIMG_GIF_NO_TRANSPARENT_COLOR
+#  ifdef NO_TRANSPARENT_COLOR
+#    define CIMG_GIF_NO_TRANSPARENT_COLOR  NO_TRANSPARENT_COLOR
+#  else
+#    define CIMG_GIF_NO_TRANSPARENT_COLOR -1
+#  endif
+#endif
+
+#endif
+
 // Configure LibTIFF support.
 // (http://www.libtiff.org)
 //
@@ -41048,7 +41078,7 @@ namespace cimg_library_suffixed {
                  !cimg::strcasecmp(ext,"ptx") ||
                  !cimg::strcasecmp(ext,"raf") ||
                  !cimg::strcasecmp(ext,"srf")) load_dcraw_external(filename);
-        else if (!cimg::strcasecmp(ext,"gif")) load_gif_external(filename);
+        else if (!cimg::strcasecmp(ext,"gif")) load_gif(filename);
 
         // 3d binary formats
         else if (!cimg::strcasecmp(ext,"dcm") ||
@@ -41116,7 +41146,7 @@ namespace cimg_library_suffixed {
           else if (!cimg::strcasecmp(f_type,"pan")) load_pandore(filename);
           else if (!cimg::strcasecmp(f_type,"png")) load_png(filename);
           else if (!cimg::strcasecmp(f_type,"tif")) load_tiff(filename);
-          else if (!cimg::strcasecmp(f_type,"gif")) load_gif_external(filename);
+          else if (!cimg::strcasecmp(f_type,"gif")) load_gif(filename);
           else if (!cimg::strcasecmp(f_type,"dcm")) load_medcon_external(filename);
           else throw CImgIOException("CImg<%s>::load()",
                                      pixel_type());
@@ -41842,6 +41872,22 @@ namespace cimg_library_suffixed {
       if (!file) cimg::fclose(nfile);
       return *this;
 #endif
+    }
+    
+    //! Load image from a GIF file.
+    /**
+       \param filename Filename, as a C-string.
+    **/
+    
+    CImg<T>& load_gif(const char *const filename,
+                      const char axis='z', const float align=0) {
+      return get_load_gif(filename,axis,align).move_to(*this);
+    }
+
+    //! Load gif file, using giflib \newinstance.
+    static CImg<T> get_load_gif(const char *const filename,
+                                const char axis='z', const float align=0) {
+      return CImgList<T>().load_gif(filename).get_append(axis,align);
     }
 
     //! Load image from a PNM file.
@@ -50052,7 +50098,7 @@ namespace cimg_library_suffixed {
 #endif
         if (!cimg::strcasecmp(ext,"tif") ||
             !cimg::strcasecmp(ext,"tiff")) load_tiff(filename);
-        else if (!cimg::strcasecmp(ext,"gif")) load_gif_external(filename);
+        else if (!cimg::strcasecmp(ext,"gif")) load_gif(filename);
         else if (!cimg::strcasecmp(ext,"cimg") ||
                  !cimg::strcasecmp(ext,"cimgz") ||
                  !*ext) load_cimg(filename);
@@ -50100,7 +50146,7 @@ namespace cimg_library_suffixed {
           if (!is_stdin) {
             const char *const f_type = cimg::ftype(file,filename);
             std::fclose(file);
-            if (!cimg::strcasecmp(f_type,"gif")) load_gif_external(filename);
+            if (!cimg::strcasecmp(f_type,"gif")) load_gif(filename);
             else if (!cimg::strcasecmp(f_type,"tif")) load_tiff(filename);
             else throw CImgIOException("CImgList<%s>::load()",
                                        pixel_type());
@@ -50899,6 +50945,141 @@ namespace cimg_library_suffixed {
     static CImgList<T> get_load_ffmpeg_external(const char *const filename) {
       return CImgList<T>().load_ffmpeg_external(filename);
     }
+    
+    //! Load gif file, using GifLib
+    /**
+      \param filename Filename to read data from.
+    **/
+    CImgList<T>& load_gif(const char *const filename) {
+      return _load_gif(filename);
+    }
+    
+    //! Load image from a GIF file \newinstance.
+    static CImgList<T> get_load_gif(const char *const filename) {
+      return CImgList<T>().load_gif(filename);
+    }
+    
+    CImgList<T>& _load_gif(const char *const filename) {
+      if (!file && !filename)
+        throw CImgArgumentException(_cimg_instance
+                                    "load_gif(): Specified filename is (null).",
+                                    cimg_instance);
+#ifndef cimg_use_gif
+      if (file)
+        throw CImgIOException(_cimg_instance
+                              "load_gif(): Unable to load data from '(const char *const)' unless giflib is enabled.",
+                              cimg_instance);
+
+      else return load_other(filename);
+#else
+      // TODO: write code here
+      const char *volatile nfilename = filename; // two 'volatile' here to remove a g++ warning due to 'setjmp'.
+      
+      int gif_err = -1;
+      GifFileType *gif_file = DGifOpenFileName(nfilename);
+      if (gif_file == 0) {
+        gif_err = GifLastError();
+        throw CImgIOException(_cimg_instance
+                              "load_gif(): Couldn't open file '%s'.",
+                              cimg_instance,
+                              nfilename?nfilename:"");
+      }
+      
+      if (DGifSlurp(gif_file) == GIF_ERROR) {
+        DGifCloseFile(gif_file); // Ignoring error due to more severe errors
+        throw CImgIOException(_cimg_instance
+                                "load_gif(): Error while reading a gif file '%s'. Error = %d '%s'",
+                                cimg_instance,
+                                nfilename?nfilename:"", GifLastError());
+      }
+    
+      if (gif_file->ImageCount == 0) {
+        DGifCloseFile(gif_file); // Ignoring error due to more severe errors
+        throw CImgIOException(_cimg_instance
+                                "load_gif(): No frames found in gif file '%s'",
+                                cimg_instance,
+                                nfilename?nfilename:"");
+      }
+      
+      this->assign();
+      
+      try {
+        for (int i = 0; i < gif_file->ImageCount; ++i) {
+          SavedImage* img = &gif_file->SavedImages[i];
+          int width = img->ImageDesc.Width;
+          int height = img->ImageDesc.Height;
+          int depth = gif_file->SColorResolution;
+          int colors = gif_file->SColorMap->ColorCount;
+          int background = gif_file->SBackGroundColor;
+          ColorMapObject* color_map = img->ImageDesc.ColorMap ? img->ImageDesc.ColorMap : gif_file->SColorMap;
+          
+          ExtensionBlock* gcb = NULL;
+          for (int i = 0; i < img->ExtensionBlockCount; ++i) {
+            if (img->ExtensionBlocks[i].Function == CIMG_GIF_GRAPHICS_EXT_FUNC_CODE) {
+              gcb = &img->ExtensionBlocks[i];
+              break;
+            }
+          }
+          int transparent_color = CIMG_GIF_NO_TRANSPARENT_COLOR;
+          bool is_alpha = gcb && (gcb->Bytes[0] & 0x01);
+          if (is_alpha) {
+            transparent_color = gcb->Bytes[3];
+          }
+          // cwarn("width = %d; height = %d; depth = %d; colors = %d; background = %d; is_alpha = %d, transparent_color = %d", width, height, depth, colors, background, is_alpha, transparent_color);
+          
+          CImg<T> frame_img;
+          frame_img.assign(width, height, 1, 3 + (is_alpha?1:0));
+          
+          T *ptr_r = frame_img.data(0,0,0,0),
+            *ptr_g = frame_img.data(0,0,0,1),
+            *ptr_b = frame_img.data(0,0,0,2),
+            *ptr_a = is_alpha ? frame_img.data(0,0,0,3) : 0;
+          
+          for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+              unsigned char color_idx = img->RasterBits[y * width + x];
+              GifColorType& color_obj = color_map->Colors[color_idx];
+              GifByteType r = color_obj.Red;
+              GifByteType g = color_obj.Green;
+              GifByteType b = color_obj.Blue;
+              GifByteType alpha = color_idx == (unsigned char) transparent_color ? 0x00 : 0xFF;
+              
+              switch (frame_img._spectrum) {
+              case 3: {
+                *(ptr_r++) = (T) r;
+                *(ptr_g++) = (T) g;
+                *(ptr_b++) = (T) b;
+                break;
+              }
+              case 4: {
+                *(ptr_r++) = (T) r;
+                *(ptr_g++) = (T) g;
+                *(ptr_b++) = (T) b;
+                if (ptr_a) {
+                  *(ptr_a++) = (T) alpha;
+                }
+                break;
+              }
+              }
+            }
+          }
+          
+          if (frame_img) {
+            frame_img.move_to(*this);
+          }
+          
+        }
+      } catch (...) {
+        DGifCloseFile(gif_file); // Ignoring error due to more severe errors
+        throw;
+      }
+      
+      DGifCloseFile(gif_file); // Ignoring error
+      
+      return *this;
+#endif
+    }
+    
 
     //! Load gif file, using ImageMagick or GraphicsMagick's external tools.
     /**
