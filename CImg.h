@@ -50961,9 +50961,9 @@ namespace cimg_library_suffixed {
     
     CImgList<T>& _load_gif(const char *const filename) {
       if (!filename)
-        throw CImgArgumentException(_cimg_instance
+        throw CImgArgumentException(_cimglist_instance
                                     "load_gif(): Specified filename is (null).",
-                                    cimg_instance);
+                                    cimglist_instance);
 #ifndef cimg_use_gif
       return load_other(filename);
 #else
@@ -50974,11 +50974,11 @@ namespace cimg_library_suffixed {
       cimg::fread(gif_check,GIF_STAMP_LEN,(std::FILE*)nfile);
       cimg::fclose(nfile);
       
-      if (strncmp(gif_check, GIF87_STAMP, GIF_STAMP_LEN) != 0 && 
-          strncmp(gif_check, GIF89_STAMP, GIF_STAMP_LEN) != 0) {
-        throw CImgIOException(_cimg_instance
+      if (strncmp((const char *) gif_check, GIF87_STAMP, GIF_STAMP_LEN) != 0 && 
+          strncmp((const char *) gif_check, GIF89_STAMP, GIF_STAMP_LEN) != 0) {
+        throw CImgIOException(_cimglist_instance
                               "load_gif(): Not a gif file '%s'.",
-                              cimg_instance,
+                              cimglist_instance,
                               nfilename?nfilename:"");
       }
       
@@ -50986,25 +50986,25 @@ namespace cimg_library_suffixed {
       GifFileType *gif_file = DGifOpenFileName(nfilename);
       if (gif_file == 0) {
         gif_err = GifLastError();
-        throw CImgIOException(_cimg_instance
+        throw CImgIOException(_cimglist_instance
                               "load_gif(): Couldn't open file '%s'.",
-                              cimg_instance,
+                              cimglist_instance,
                               nfilename?nfilename:"");
       }
       
       if (DGifSlurp(gif_file) == GIF_ERROR) {
         DGifCloseFile(gif_file); // Ignoring error due to more severe errors
-        throw CImgIOException(_cimg_instance
+        throw CImgIOException(_cimglist_instance
                                "load_gif(): Error while reading a gif file '%s'. Error = %d '%s'",
-                               cimg_instance,
+                               cimglist_instance,
                                nfilename?nfilename:"", GifLastError());
       }
     
       if (gif_file->ImageCount == 0) {
         DGifCloseFile(gif_file); // Ignoring error due to more severe errors
-        throw CImgIOException(_cimg_instance
+        throw CImgIOException(_cimglist_instance
                               "load_gif(): No frames found in gif file '%s'",
-                              cimg_instance,
+                              cimglist_instance,
                               nfilename?nfilename:"");
       }
       
